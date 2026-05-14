@@ -85,22 +85,18 @@ app.get('/login', (req, res) => {
   res.render('login', { error: null });
 });
 
-// LOGIN (POST - Dengan Debug Error)
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
   
-  // Tambahkan error dari supabase untuk di-debug
   const { data: user, error } = await supabase.from('users').select('*').eq('username', username).single();
   
-  // Jika Supabase mengembalikan error (misal: RLS aktif)
+  // Jika error PGRST116, artinya hasilnya 0 baris (username tidak ada)
   if (error) {
+    if (error.code === 'PGRST116') {
+      return res.render('login', { error: 'Username tidak ditemukan di database!' });
+    }
     console.error("Supabase Error:", error);
     return res.render('login', { error: `Database Error: ${error.message}` });
-  }
-
-  // Jika user tidak ditemukan
-  if (!user) {
-    return res.render('login', { error: 'Username tidak ditemukan di database!' });
   }
 
   // Cek password bcrypt
@@ -112,7 +108,6 @@ app.post('/login', async (req, res) => {
     res.render('login', { error: 'Password yang dimasukkan salah!' });
   }
 });
-
 // LOGOUT
 app.get('/logout', (req, res) => {
   req.session.destroy();
