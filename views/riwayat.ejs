@@ -1,0 +1,46 @@
+<%- include('header') %>
+<%- include('sidebar', { user: user, page: 'riwayat' }) %>
+
+<main class="flex-1 p-8">
+    <h2 class="text-2xl font-bold text-green-400 mb-6">Riwayat & Status Transaksi</h2>
+    <div class="bg-gray-800/50 border border-blue-500/30 rounded-lg p-6 card-glow overflow-x-auto">
+        <table class="w-full text-left text-sm table-dark">
+            <thead>
+                <tr>
+                    <th class="py-3 px-4">Ref ID</th>
+                    <th class="py-3 px-4">Produk</th>
+                    <th class="py-3 px-4">Tujuan</th>
+                    <th class="py-3 px-4">Status</th>
+                    <th class="py-3 px-4">Pesan</th>
+                </tr>
+            </thead>
+            <tbody>
+                <% if(history.length === 0) { %>
+                <tr>
+                    <td colspan="5" class="py-4 text-center text-gray-500">Belum ada riwayat transaksi.</td>
+                </tr>
+                <% } else { %>
+                    <% history.forEach(function(trx) { %>
+                    <tr>
+                        <td class="py-3 px-4 text-green-300 font-mono text-xs"><%= trx.ref_id %></td>
+                        <td class="py-3 px-4 text-white"><%= trx.product %></td>
+                        <td class="py-3 px-4 text-white"><%= trx.dest %></td>
+                        <td class="py-3 px-4">
+                            <% if(trx.status === 'SUKSES') { %>
+                                <span class="bg-green-500/20 text-green-400 px-2 py-1 rounded text-xs font-bold"><%= trx.status %></span>
+                            <% } else if(trx.status === 'GAGAL') { %>
+                                <span class="bg-red-500/20 text-red-400 px-2 py-1 rounded text-xs font-bold"><%= trx.status %></span>
+                            <% } else { %>
+                                <span class="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded text-xs font-bold animate-pulse"><%= trx.status %></span>
+                            <% } %>
+                        </td>
+                        <td class="py-3 px-4 text-gray-400 text-xs max-w-sm truncate"><%= trx.message %></td>
+                    </tr>
+                    <% }); %>
+                <% } %>
+            </tbody>
+        </table>
+    </div>
+</main>
+</body>
+</html>

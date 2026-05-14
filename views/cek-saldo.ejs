@@ -1,0 +1,17 @@
+<%- include('header') %>
+<%- include('sidebar', { user: user, page: 'saldo' }) %>
+
+<main class="flex-1 p-8">
+    <h2 class="text-2xl font-bold text-green-400 mb-6">Cek Saldo</h2>
+    <div class="bg-gray-800/50 border border-green-500/30 rounded-lg p-6 card-glow max-w-lg">
+        <% if (saldo) { %>
+        <div class="bg-black/40 p-4 rounded border border-green-500/50">
+            <p class="text-green-300 font-mono"><%= saldo %></p>
+        </div>
+        <% } else { %>
+        <p class="text-gray-400">Memuat saldo dari server...</p>
+        <% } %>
+    </div>
+</main>
+</body>
+</html>
