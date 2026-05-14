@@ -1,17 +1,20 @@
-<%- include('header') %>
-<%- include('sidebar' user: user, page: 'dashboard' }) %>
+<%- include("header") %>
+<%- include("sidebar", { user: user, page: "dashboard" }) %>
 
-<main class="flflex-1-8">
+<main class="flex-1 p-8">
     <h2 class="text-2xl font-bold text-green-400 mb-6">Dashboard</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Card Saldo -->
         <div class="bg-gray-800/50 border border-green-500/30 rounded-lg p-6 card-glow">
             <h3 class="text-blue-300 text-sm uppercase">Saldo Anda</h3>
             <p class="text-3xl font-bold text-green-400 mt-2">Rp <%= user.balance.toLocaleString() %></p>
         </div>
+        <!-- Card Total Trx -->
         <div class="bg-gray-800/50 border border-blue-500/30 rounded-lg p-6 card-glow">
             <h3 class="text-blue-300 text-sm uppercase">Total Transaksi</h3>
             <p class="text-3xl font-bold text-white mt-2"><%= totalTrx %></p>
         </div>
+        <!-- Card Status -->
         <div class="bg-gray-800/50 border border-green-500/30 rounded-lg p-6 card-glow">
             <h3 class="text-blue-300 text-sm uppercase">Server Status</h3>
             <p class="text-xl font-bold text-green-400 mt-2 flex items-center">
