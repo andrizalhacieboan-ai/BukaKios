@@ -100,7 +100,7 @@ app.get('/logout', (req, res) => {
 });
 
 // Dashboard
-app.get('/dashboard', requireLogin, async (req, res) => {
+app.get('/', requireLogin, async (req, res) => {
   const { count: totalTrx } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('user_id', req.session.user.id);
   res.render('dashboard', { user: req.session.user, totalTrx: totalTrx || 0, page: 'dashboard' });
 });
