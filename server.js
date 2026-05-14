@@ -27,7 +27,7 @@ const currentUser = {
   id: 1,
   username: 'Andri',
   role: 'admin',
-  balance: 0 // Saldo ini hanya pajangan di UI, saldo asli ada di Okeconnect
+  balance: 0 // Saldo ini hanya pajangan di UI, saldo asli cek di Cek Saldo
 };
 
 // --- CORE HTTP REQUEST ---
@@ -94,4 +94,74 @@ app.get('/harga', async (req, res) => {
     const products = JSON.parse(jsonString);
     res.render('harga', { user: currentUser, products, page: 'harga' });
   } catch (error) {
-    res.render('harga', { user: currentUser, products: [], page: '
+    res.render('harga', { user: currentUser, products: [], page: 'harga', error: 'Gagal memuat data harga' });
+  }
+});
+
+// DEPOSIT
+app.get('/deposit', async (req, res) => {
+  const { data: deposits } = await supabase.from('deposits').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  res.render('deposit', { user: currentUser, deposits: deposits || [], page: 'deposit' });
+});
+
+app.post('/deposit', async (req, res) => {
+  const { amount } = req.body;
+  if (amount > 0) {
+    await supabase.from('deposits').insert([{
+      user_id: currentUser.id,
+      amount: amount,
+      status: 'PENDING'
+    }]);
+  }
+  res.redirect('/deposit');
+});
+
+// BUAT TRANSAKSI
+app.get('/buat-transaksi', (req, res) => {
+  res.render('buat-transaksi', { user: currentUser, result: null, page: 'trx' });
+});
+
+app.post('/buat-transaksi', async (req, res) => {
+  const { product, dest } = req.body;
+  const refID = `AND${Date.now()}`;
+  
+  const params = new URLSearchParams({
+    product, dest, refID,
+    memberID: process.env.MEMBER_ID,
+    pin: process.env.PIN,
+    password: process.env.PASSWORD
+  });
+
+  const rawResult = await requestTrx(`https://h2h.okeconnect.com/trx?${params.toString()}`);
+  
+  await supabase.from('transactions').insert([{
+    user_id: currentUser.id,
+    ref_id: refID,
+    product, dest,
+    status: 'PENDING',
+    message: rawResult
+  }]);
+
+  res.render('buat-transaksi', { user: currentUser, result: rawResult, page: 'trx' });
+});
+
+// CALLBACK OKECONNECT
+app.get('/callback', async (req, res) => {
+  const { refid, message } = req.query;
+  if (refid) {
+    await supabase.from('transactions').update({ 
+      status: message.includes('GAGAL') ? 'GAGAL' : 'SUKSES', 
+      message: message 
+    }).eq('ref_id', refid);
+  }
+  res.send('OK');
+});
+
+// RIWAYAT
+app.get('/riwayat', async (req, res) => {
+  const { data: history } = await supabase.from('transactions').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false });
+  res.render('riwayat', { user: currentUser, history: history || [], page: 'riwayat' });
+});
+
+// EXPORT UNTUK VERCEL SERVERLESS
+export default app;
