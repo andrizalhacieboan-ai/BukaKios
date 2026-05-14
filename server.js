@@ -90,20 +90,27 @@ app.post('/login', async (req, res) => {
   
   const { data: user, error } = await supabase.from('users').select('*').eq('username', username).single();
   
-  // Jika error PGRST116, artinya hasilnya 0 baris (username tidak ada)
-  if (error) {
-    if (error.code === 'PGRST116') {
-      return res.render('login', { error: 'Username tidak ditemukan di database!' });
-    }
-    console.error("Supabase Error:", error);
-    return res.render('login', { error: `Database Error: ${error.message}` });
+  if (error || !user) {
+    return res.render('login', { error: 'Username tidak ditemukan di database!' });
   }
 
   // Cek password bcrypt
   const passwordMatch = await bcrypt.compare(password, user.password);
+  
   if (passwordMatch) {
+    // Simpan data user ke sesi
     req.session.user = user;
-    res.redirect('/');
+    
+    // WAJIB: Save sesi secara eksplisit ke database Supabase SEBELUM redirect
+    // Ini mengatasi bug Vercel Serverless yang redirect terlalu cepat
+    req.session.save((err) => {
+      if (err) {
+        console.error("Gagal menyimpan sesi:", err);
+        return res.render('login', { error: 'Terjadi kesalahan pada sesi.' });
+      }
+      // Baru redirect setelah sesi 100% tersimpan di DB
+      res.redirect('/');
+    });
   } else {
     res.render('login', { error: 'Password yang dimasukkan salah!' });
   }
