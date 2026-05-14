@@ -2,7 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import session from 'express-session';
-import pgSession from 'connect-pg-simple'; // Import PgStore
+import pgSession from 'connect-pg-simple';
 import bcrypt from 'bcryptjs';
 import https from 'node:https';
 import { URL } from 'node:url';
@@ -16,7 +16,7 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Supabase Setup (Untuk Query Data)
+// Supabase Setup
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // Setup EJS & Public
@@ -25,20 +25,20 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 
-// Session Setup (Menyimpan ke PostgreSQL Supabase)
+// Session Setup (PostgreSQL Supabase)
 const PgStore = pgSession(session);
 
 app.use(session({
   store: new PgStore({
-    conString: process.env.DATABASE_URL, // Gunakan Connection String Supabase
-    tableName: 'session' // Nama tabel yang tadi dibuat di SQL Editor
+    conString: process.env.DATABASE_URL,
+    tableName: 'session'
   }),
   secret: process.env.SESSION_SECRET || 'fallback_secret',
   resave: false,
-  saveUninitialized: false, // Diubah false agar tidak bikin session kosong boros memori
+  saveUninitialized: false,
   cookie: { 
-    maxAge: 30 * 24 * 60 * 60 * 1000, // Session bertanda 30 hari
-    secure: process.env.NODE_ENV === 'production' // Auto true di Vercel HTTPS
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+    secure: process.env.NODE_ENV === 'production'
   }
 }));
 
@@ -80,7 +80,12 @@ const requireLogin = (req, res, next) => {
 
 // --- ROUTES ---
 
-// Login
+// LOGIN (GET)
+app.get('/login', (req, res) => {
+  res.render('login', { error: null });
+});
+
+// LOGIN (POST - Dengan Debug Error)
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
   
@@ -108,18 +113,19 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// LOGOUT
 app.get('/logout', (req, res) => {
   req.session.destroy();
   res.redirect('/login');
 });
 
-// Dashboard
+// DASHBOARD
 app.get('/', requireLogin, async (req, res) => {
   const { count: totalTrx } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('user_id', req.session.user.id);
   res.render('dashboard', { user: req.session.user, totalTrx: totalTrx || 0, page: 'dashboard' });
 });
 
-// Cek Saldo Okeconnect
+// CEK SALDO
 app.get('/cek-saldo', requireLogin, async (req, res) => {
   let saldo = null;
   if (req.query.cek === 'true') {
@@ -133,7 +139,7 @@ app.get('/cek-saldo', requireLogin, async (req, res) => {
   res.render('cek-saldo', { user: req.session.user, saldo, page: 'saldo' });
 });
 
-// Harga Produk
+// HARGA PRODUK
 app.get('/harga', requireLogin, async (req, res) => {
   try {
     const jsonString = await requestTrx('https://okeconnect.com/harga/json?id=905ccd028329b0a');
@@ -144,7 +150,7 @@ app.get('/harga', requireLogin, async (req, res) => {
   }
 });
 
-// Deposit
+// DEPOSIT
 app.get('/deposit', requireLogin, async (req, res) => {
   const { data: deposits } = await supabase.from('deposits').select('*').eq('user_id', req.session.user.id).order('created_at', { ascending: false });
   res.render('deposit', { user: req.session.user, deposits: deposits || [], page: 'deposit' });
@@ -162,7 +168,7 @@ app.post('/deposit', requireLogin, async (req, res) => {
   res.redirect('/deposit');
 });
 
-// Buat Transaksi
+// BUAT TRANSAKSI
 app.get('/buat-transaksi', requireLogin, (req, res) => {
   res.render('buat-transaksi', { user: req.session.user, result: null, page: 'trx' });
 });
@@ -191,7 +197,7 @@ app.post('/buat-transaksi', requireLogin, async (req, res) => {
   res.render('buat-transaksi', { user: req.session.user, result: rawResult, page: 'trx' });
 });
 
-// Callback Okeconnect (Webhook Dingdong)
+// CALLBACK OKECONNECT
 app.get('/callback', async (req, res) => {
   const { refid, message } = req.query;
   if (refid) {
@@ -203,7 +209,7 @@ app.get('/callback', async (req, res) => {
   res.send('OK');
 });
 
-// Riwayat
+// RIWAYAT
 app.get('/riwayat', requireLogin, async (req, res) => {
   const { data: history } = await supabase.from('transactions').select('*').eq('user_id', req.session.user.id).order('created_at', { ascending: false });
   res.render('riwayat', { user: req.session.user, history: history || [], page: 'riwayat' });
