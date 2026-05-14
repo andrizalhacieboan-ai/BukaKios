@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 import session from 'express-session';
+import pgSession from 'connect-pg-simple'; // Import PgStore
 import bcrypt from 'bcryptjs';
 import https from 'node:https';
 import { URL } from 'node:url';
@@ -15,7 +16,7 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Supabase Setup
+// Supabase Setup (Untuk Query Data)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // Setup EJS & Public
@@ -24,12 +25,21 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 
-// Session Setup
+// Session Setup (Menyimpan ke PostgreSQL Supabase)
+const PgStore = pgSession(session);
+
 app.use(session({
+  store: new PgStore({
+    conString: process.env.DATABASE_URL, // Gunakan Connection String Supabase
+    tableName: 'session' // Nama tabel yang tadi dibuat di SQL Editor
+  }),
   secret: process.env.SESSION_SECRET || 'fallback_secret',
   resave: false,
-  saveUninitialized: true,
-  cookie: { secure: process.env.NODE_ENV === 'production' }
+  saveUninitialized: false, // Diubah false agar tidak bikin session kosong boros memori
+  cookie: { 
+    maxAge: 30 * 24 * 60 * 60 * 1000, // Session bertanda 30 hari
+    secure: process.env.NODE_ENV === 'production' // Auto true di Vercel HTTPS
+  }
 }));
 
 // --- CORE HTTP REQUEST ---
@@ -90,7 +100,7 @@ app.get('/logout', (req, res) => {
 });
 
 // Dashboard
-app.get('/dashboard', requireLogin, async (req, res) => {
+app.get('/', requireLogin, async (req, res) => {
   const { count: totalTrx } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('user_id', req.session.user.id);
   res.render('dashboard', { user: req.session.user, totalTrx: totalTrx || 0, page: 'dashboard' });
 });
@@ -109,7 +119,7 @@ app.get('/cek-saldo', requireLogin, async (req, res) => {
   res.render('cek-saldo', { user: req.session.user, saldo, page: 'saldo' });
 });
 
-// Harga Produk 
+// Harga Produk
 app.get('/harga', requireLogin, async (req, res) => {
   try {
     const jsonString = await requestTrx('https://okeconnect.com/harga/json?id=905ccd028329b0a');
@@ -167,7 +177,7 @@ app.post('/buat-transaksi', requireLogin, async (req, res) => {
   res.render('buat-transaksi', { user: req.session.user, result: rawResult, page: 'trx' });
 });
 
-// Callback Okeconnect
+// Callback Okeconnect (Webhook Dingdong)
 app.get('/callback', async (req, res) => {
   const { refid, message } = req.query;
   if (refid) {
@@ -185,5 +195,5 @@ app.get('/riwayat', requireLogin, async (req, res) => {
   res.render('riwayat', { user: req.session.user, history: history || [], page: 'riwayat' });
 });
 
-
+// EXPORT UNTUK VERCEL SERVERLESS
 export default app;
