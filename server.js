@@ -1,9 +1,6 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import session from 'express-session';
-import pgSession from 'connect-pg-simple';
-import bcrypt from 'bcryptjs';
 import https from 'node:https';
 import { URL } from 'node:url';
 import zlib from 'node:zlib';
@@ -16,7 +13,7 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Supabase Setup
+// Supabase Setup (Hanya untuk menyimpan riwayat transaksi & deposit)
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // Setup EJS & Public
@@ -25,22 +22,13 @@ app.set('views', path.join(__dirname, 'views'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true }));
 
-// Session Setup (PostgreSQL Supabase)
-const PgStore = pgSession(session);
-
-app.use(session({
-  store: new PgStore({
-    conString: process.env.DATABASE_URL,
-    tableName: 'session'
-  }),
-  secret: process.env.SESSION_SECRET || 'fallback_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { 
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-    secure: process.env.NODE_ENV === 'production'
-  }
-}));
+// Data User Dummy (Karena tidak ada login, data ini yang akan ditampilin di dashboard)
+const currentUser = {
+  id: 1,
+  username: 'Andri',
+  role: 'admin',
+  balance: 0 // Saldo ini hanya pajangan di UI, saldo asli ada di Okeconnect
+};
 
 // --- CORE HTTP REQUEST ---
 const requestTrx = (targetUrl) => {
@@ -72,63 +60,21 @@ const requestTrx = (targetUrl) => {
   });
 };
 
-// Middleware Auth
-const requireLogin = (req, res, next) => {
-  if (!req.session.user) return res.redirect('/login');
-  next();
-};
-
 // --- ROUTES ---
 
-// LOGIN (GET)
-app.get('/login', (req, res) => {
-  res.render('login', { error: null });
-});
-
-app.post('/login', async (req, res) => {
-  const { username, password } = req.body;
-  
-  const { data: user, error } = await supabase.from('users').select('*').eq('username', username).single();
-  
-  if (error || !user) {
-    return res.render('login', { error: 'Username tidak ditemukan di database!' });
-  }
-
-  // Cek password bcrypt
-  const passwordMatch = await bcrypt.compare(password, user.password);
-  
-  if (passwordMatch) {
-    // Simpan data user ke sesi
-    req.session.user = user;
-    
-    // WAJIB: Save sesi secara eksplisit ke database Supabase SEBELUM redirect
-    // Ini mengatasi bug Vercel Serverless yang redirect terlalu cepat
-    req.session.save((err) => {
-      if (err) {
-        console.error("Gagal menyimpan sesi:", err);
-        return res.render('login', { error: 'Terjadi kesalahan pada sesi.' });
-      }
-      // Baru redirect setelah sesi 100% tersimpan di DB
-      res.redirect('/');
-    });
-  } else {
-    res.render('login', { error: 'Password yang dimasukkan salah!' });
-  }
-});
-// LOGOUT
-app.get('/logout', (req, res) => {
-  req.session.destroy();
-  res.redirect('/login');
+// Langsung Redirect ke Dashboard
+app.get('/', (req, res) => {
+  res.redirect('/dashboard');
 });
 
 // DASHBOARD
-app.get('/', requireLogin, async (req, res) => {
-  const { count: totalTrx } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('user_id', req.session.user.id);
-  res.render('dashboard', { user: req.session.user, totalTrx: totalTrx || 0, page: 'dashboard' });
+app.get('/dashboard', async (req, res) => {
+  const { count: totalTrx } = await supabase.from('transactions').select('*', { count: 'exact', head: true }).eq('user_id', currentUser.id);
+  res.render('dashboard', { user: currentUser, totalTrx: totalTrx || 0, page: 'dashboard' });
 });
 
 // CEK SALDO
-app.get('/cek-saldo', requireLogin, async (req, res) => {
+app.get('/cek-saldo', async (req, res) => {
   let saldo = null;
   if (req.query.cek === 'true') {
     const params = new URLSearchParams({
@@ -138,84 +84,14 @@ app.get('/cek-saldo', requireLogin, async (req, res) => {
     });
     saldo = await requestTrx(`https://h2h.okeconnect.com/trx/balance?${params.toString()}`);
   }
-  res.render('cek-saldo', { user: req.session.user, saldo, page: 'saldo' });
+  res.render('cek-saldo', { user: currentUser, saldo, page: 'saldo' });
 });
 
 // HARGA PRODUK
-app.get('/harga', requireLogin, async (req, res) => {
+app.get('/harga', async (req, res) => {
   try {
     const jsonString = await requestTrx('https://okeconnect.com/harga/json?id=905ccd028329b0a');
     const products = JSON.parse(jsonString);
-    res.render('harga', { user: req.session.user, products, page: 'harga' });
+    res.render('harga', { user: currentUser, products, page: 'harga' });
   } catch (error) {
-    res.render('harga', { user: req.session.user, products: [], page: 'harga', error: 'Gagal memuat data harga' });
-  }
-});
-
-// DEPOSIT
-app.get('/deposit', requireLogin, async (req, res) => {
-  const { data: deposits } = await supabase.from('deposits').select('*').eq('user_id', req.session.user.id).order('created_at', { ascending: false });
-  res.render('deposit', { user: req.session.user, deposits: deposits || [], page: 'deposit' });
-});
-
-app.post('/deposit', requireLogin, async (req, res) => {
-  const { amount } = req.body;
-  if (amount > 0) {
-    await supabase.from('deposits').insert([{
-      user_id: req.session.user.id,
-      amount: amount,
-      status: 'PENDING'
-    }]);
-  }
-  res.redirect('/deposit');
-});
-
-// BUAT TRANSAKSI
-app.get('/buat-transaksi', requireLogin, (req, res) => {
-  res.render('buat-transaksi', { user: req.session.user, result: null, page: 'trx' });
-});
-
-app.post('/buat-transaksi', requireLogin, async (req, res) => {
-  const { product, dest } = req.body;
-  const refID = `AND${Date.now()}`;
-  
-  const params = new URLSearchParams({
-    product, dest, refID,
-    memberID: process.env.MEMBER_ID,
-    pin: process.env.PIN,
-    password: process.env.PASSWORD
-  });
-
-  const rawResult = await requestTrx(`https://h2h.okeconnect.com/trx?${params.toString()}`);
-  
-  await supabase.from('transactions').insert([{
-    user_id: req.session.user.id,
-    ref_id: refID,
-    product, dest,
-    status: 'PENDING',
-    message: rawResult
-  }]);
-
-  res.render('buat-transaksi', { user: req.session.user, result: rawResult, page: 'trx' });
-});
-
-// CALLBACK OKECONNECT
-app.get('/callback', async (req, res) => {
-  const { refid, message } = req.query;
-  if (refid) {
-    await supabase.from('transactions').update({ 
-      status: message.includes('GAGAL') ? 'GAGAL' : 'SUKSES', 
-      message: message 
-    }).eq('ref_id', refid);
-  }
-  res.send('OK');
-});
-
-// RIWAYAT
-app.get('/riwayat', requireLogin, async (req, res) => {
-  const { data: history } = await supabase.from('transactions').select('*').eq('user_id', req.session.user.id).order('created_at', { ascending: false });
-  res.render('riwayat', { user: req.session.user, history: history || [], page: 'riwayat' });
-});
-
-// EXPORT UNTUK VERCEL SERVERLESS
-export default app;
+    res.render('harga', { user: currentUser, products: [], page: '
