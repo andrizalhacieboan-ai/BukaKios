@@ -81,16 +81,30 @@ const requireLogin = (req, res, next) => {
 // --- ROUTES ---
 
 // Login
-app.get('/login', (req, res) => res.render('login', { error: null }));
 app.post('/login', async (req, res) => {
   const { username, password } = req.body;
-  const { data: user } = await supabase.from('users').select('*').eq('username', username).single();
   
-  if (user && await bcrypt.compare(password, user.password)) {
+  // Tambahkan error dari supabase untuk di-debug
+  const { data: user, error } = await supabase.from('users').select('*').eq('username', username).single();
+  
+  // Jika Supabase mengembalikan error (misal: RLS aktif)
+  if (error) {
+    console.error("Supabase Error:", error);
+    return res.render('login', { error: `Database Error: ${error.message}` });
+  }
+
+  // Jika user tidak ditemukan
+  if (!user) {
+    return res.render('login', { error: 'Username tidak ditemukan di database!' });
+  }
+
+  // Cek password bcrypt
+  const passwordMatch = await bcrypt.compare(password, user.password);
+  if (passwordMatch) {
     req.session.user = user;
     res.redirect('/');
   } else {
-    res.render('login', { error: 'Username atau Password salah!' });
+    res.render('login', { error: 'Password yang dimasukkan salah!' });
   }
 });
 
